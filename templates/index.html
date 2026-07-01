@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S3 Cloud Gallery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            400: '#60a5fa',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            900: '#1e3a8a',
+                        }
+                    },
+                    boxShadow: {
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+                        'premium': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .item-card { 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .item-card:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02); 
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Toast animation */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .toast-enter { animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast-exit { animation: fadeOut 0.4s ease forwards; }
+
+        /* Lightbox */
+        #lightbox {
+            backdrop-filter: blur(15px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-gradient-to-br from-indigo-50 via-white to-sky-50 text-slate-800">
+    
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col space-y-3 pointer-events-none w-80">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="toast-message toast-enter pointer-events-auto glass-panel p-4 rounded-2xl shadow-premium flex items-start {{ 'border-green-200' if category == 'success' else 'border-red-200' }}">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <i class="fa-solid {{ 'fa-check-circle text-green-500' if category == 'success' else 'fa-exclamation-circle text-red-500' }} text-lg"></i>
+                        </div>
+                        <div class="ml-3 w-0 flex-1">
+                            <p class="text-sm font-medium text-slate-800">{{ message }}</p>
+                        </div>
+                        <button onclick="this.parentElement.remove()" class="ml-4 flex-shrink-0 text-slate-400 hover:text-slate-600 transition-colors">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Navigation -->
+    <nav class="glass-panel sticky top-0 z-40 border-b border-white/50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="window.location.href='/'">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center shadow-md">
+                        <i class="fa-solid fa-cloud text-white text-lg"></i>
+                    </div>
+                    <span class="font-bold text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">CloudGallery</span>
+                </div>
+                <div class="flex items-center space-x-3 sm:space-x-4">
+                    {% if not current_bucket %}
+                        <button onclick="openModal('createBucketModal')" class="bg-gradient-to-r from-brand-500 to-indigo-600 hover:from-brand-600 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-brand-500/30 flex items-center transform hover:scale-105">
+                            <i class="fa-solid fa-plus sm:mr-2"></i> <span class="hidden sm:inline">New Bucket</span>
+                        </button>
+                    {% else %}
+                        <button onclick="openModal('folderModal')" class="bg-white/80 hover:bg-white text-slate-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm border border-slate-200 hover:border-slate-300 flex items-center">
+                            <i class="fa-solid fa-folder-plus sm:mr-2 text-slate-400"></i> <span class="hidden sm:inline">New Folder</span>
+                        </button>
+                        <button onclick="openModal('uploadModal')" class="bg-gradient-to-r from-brand-500 to-indigo-600 hover:from-brand-600 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md shadow-brand-500/30 flex items-center transform hover:scale-105">
+                            <i class="fa-solid fa-cloud-arrow-up sm:mr-2"></i> <span class="hidden sm:inline">Upload</span>
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full relative z-10">
+        
+        {% if not current_bucket %}
+            <!-- BUCKETS VIEW -->
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold text-slate-800 mb-6 flex items-center">
+                    <i class="fa-solid fa-database text-brand-500 mr-3"></i> Your S3 Buckets
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    {% for b in buckets %}
+                        <a href="{{ url_for('index', bucket=b.Name) }}" class="item-card glass-panel rounded-3xl p-6 flex flex-col items-start cursor-pointer border border-white hover:border-brand-200 group relative overflow-hidden">
+                            <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center mb-4 group-hover:bg-indigo-500 group-hover:text-white transition-colors duration-300">
+                                <i class="fa-solid fa-bucket text-xl"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 truncate w-full mb-1">{{ b.Name }}</h3>
+                            <p class="text-xs text-slate-400 font-medium">Created: {{ b.CreationDate.strftime('%Y-%m-%d') if b.CreationDate else 'Unknown' }}</p>
+                            
+                            <!-- decorative element -->
+                            <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-brand-500/5 rounded-full blur-xl group-hover:bg-brand-500/20 transition-all duration-500"></div>
+                        </a>
+                    {% else %}
+                        <div class="col-span-full flex flex-col items-center justify-center py-20 glass-panel rounded-3xl border-2 border-dashed border-slate-300/50">
+                            <div class="w-20 h-20 bg-brand-50 rounded-full flex items-center justify-center mb-5 shadow-inner">
+                                <i class="fa-solid fa-bucket text-brand-400 text-3xl"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">No Buckets Found</h3>
+                            <p class="text-slate-500 mb-6 text-sm">Create an AWS S3 bucket to start uploading your images.</p>
+                            <button onclick="openModal('createBucketModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-md">
+                                Create New Bucket
+                            </button>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% else %}
+            <!-- GALLERY VIEW -->
+            
+            <!-- Breadcrumbs -->
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                <div class="flex items-center text-sm font-medium text-slate-500 glass-panel px-4 py-2.5 rounded-xl shadow-sm overflow-x-auto max-w-full">
+                    <a href="{{ url_for('index') }}" class="hover:text-brand-600 transition-colors flex items-center whitespace-nowrap">
+                        <i class="fa-solid fa-database mr-2 text-slate-400"></i> Buckets
+                    </a>
+                    <i class="fa-solid fa-chevron-right text-[10px] mx-3 text-slate-300"></i>
+                    <a href="{{ url_for('index', bucket=current_bucket) }}" class="hover:text-brand-600 transition-colors whitespace-nowrap font-semibold text-brand-600">
+                        {{ current_bucket }}
+                    </a>
+                    {% if current_prefix %}
+                        {% set parts = current_prefix.strip('/').split('/') %}
+                        {% set current_path = namespace(value='') %}
+                        {% for part in parts %}
+                            <i class="fa-solid fa-chevron-right text-[10px] mx-3 text-slate-300"></i>
+                            {% set current_path.value = current_path.value + part + '/' %}
+                            <a href="{{ url_for('index', bucket=current_bucket, prefix=current_path.value) }}" class="hover:text-brand-600 transition-colors whitespace-nowrap">
+                                {{ part }}
+                            </a>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                
+                {% if files %}
+                <div class="text-sm font-semibold text-slate-500 bg-white/60 px-4 py-2 rounded-xl border border-white">
+                    <i class="fa-regular fa-image mr-1"></i> {{ files|length }} Items
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Folders Section -->
+            <div class="mb-10">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5">
+                    {% if current_prefix %}
+                        <a href="{{ url_for('index', bucket=current_bucket, prefix=parent_prefix) }}" class="item-card glass-panel rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer h-28 relative overflow-hidden group">
+                            <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-3 group-hover:bg-slate-200 transition-colors">
+                                <i class="fa-solid fa-arrow-left text-slate-500"></i>
+                            </div>
+                            <span class="text-sm font-semibold text-slate-600">Go Back</span>
+                        </a>
+                    {% endif %}
+                    
+                    {% for folder in folders %}
+                        <a href="{{ url_for('index', bucket=current_bucket, prefix=folder.full_prefix) }}" class="item-card glass-panel rounded-2xl p-5 flex flex-col items-start cursor-pointer h-28 relative overflow-hidden group border border-white hover:border-brand-200">
+                            <div class="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-2 group-hover:bg-brand-100 transition-colors">
+                                <i class="fa-solid fa-folder text-brand-500 text-xl"></i>
+                            </div>
+                            <span class="text-sm font-bold text-slate-700 truncate w-full mt-auto">{{ folder.name }}</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Images Section (Pinterest-style Masonry) -->
+            <div>
+                <h2 class="text-xl font-bold text-slate-800 mb-5 flex items-center">
+                    Gallery
+                </h2>
+                
+                <div class="columns-2 sm:columns-3 md:columns-4 lg:columns-5 gap-4">
+                    {% for file in files %}
+                        <div class="item-card bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group relative break-inside-avoid mb-4">
+                            <!-- Image Container -->
+                            <div class="w-full relative overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer group-hover:bg-slate-100 transition-colors" onclick="openLightbox('{{ file.url }}', '{{ file.name }}')">
+                                {% if file.url %}
+                                    <img src="{{ file.url }}" alt="{{ file.name }}" loading="lazy" class="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-700 ease-out">
+                                {% else %}
+                                    <div class="py-20 flex justify-center items-center">
+                                        <i class="fa-regular fa-image text-slate-300 text-4xl"></i>
+                                    </div>
+                                {% endif %}
+                                
+                                <!-- Hover Overlay -->
+                                <div class="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3 pointer-events-none">
+                                    <!-- Action Buttons (Top Right) -->
+                                    <div class="flex justify-end space-x-2 -translate-y-2 group-hover:translate-y-0 transition-transform duration-300 pointer-events-auto">
+                                        <button onclick="openRenameModal('{{ file.key }}', '{{ file.name }}'); event.stopPropagation();" class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-amber-400 hover:text-white transition-colors shadow-sm" title="Rename">
+                                            <i class="fa-solid fa-pen text-xs"></i>
+                                        </button>
+                                        <form action="{{ url_for('delete_object') }}" method="POST" class="inline" onsubmit="return confirm('Delete this image permanently?');">
+                                            <input type="hidden" name="bucket" value="{{ current_bucket }}">
+                                            <input type="hidden" name="key" value="{{ file.key }}">
+                                            <input type="hidden" name="prefix" value="{{ current_prefix }}">
+                                            <button type="submit" onclick="event.stopPropagation();" class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md text-white flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm" title="Delete">
+                                                <i class="fa-solid fa-trash-can text-xs"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                    
+                                    <!-- Details (Bottom) -->
+                                    <div class="translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+                                        <h3 class="text-sm font-bold text-white truncate drop-shadow-md" title="{{ file.name }}">{{ file.name }}</h3>
+                                        <p class="text-[10px] font-medium text-slate-300 mt-0.5 uppercase drop-shadow-md">{{ (file.size / 1024)|round(1) }} KB</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% else %}
+                        {% if not folders %}
+                            <div class="col-span-full flex flex-col items-center justify-center py-20 glass-panel rounded-3xl border-2 border-dashed border-slate-300/50">
+                                <div class="w-20 h-20 bg-brand-50 rounded-full flex items-center justify-center mb-5 shadow-inner">
+                                    <i class="fa-solid fa-images text-brand-400 text-3xl"></i>
+                                </div>
+                                <h3 class="text-lg font-bold text-slate-800 mb-2">Empty Gallery</h3>
+                                <p class="text-slate-500 mb-6 text-sm">Upload images to this bucket to see them here.</p>
+                                <button onclick="openModal('uploadModal')" class="bg-white hover:bg-slate-50 text-slate-700 px-6 py-2.5 rounded-full font-semibold text-sm transition-all shadow-sm border border-slate-200">
+                                    Upload Files
+                                </button>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </main>
+
+    <!-- Create Bucket Modal -->
+    <div id="createBucketModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300" id="createBucketModalContent">
+            <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <div class="w-8 h-8 rounded-lg bg-brand-100 flex items-center justify-center mr-3">
+                        <i class="fa-solid fa-bucket text-brand-600"></i>
+                    </div>
+                    Create Bucket
+                </h3>
+                <button onclick="closeModal('createBucketModal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form action="{{ url_for('create_bucket') }}" method="POST" class="p-6">
+                <div class="mb-6">
+                    <label for="bucket_name" class="block text-sm font-semibold text-slate-700 mb-2">Bucket Name</label>
+                    <input type="text" id="bucket_name" name="bucket_name" required pattern="^[a-z0-9.-]+$" title="Only lowercase letters, numbers, hyphens, and periods" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 focus:bg-white outline-none transition-all font-medium text-slate-800" placeholder="my-awesome-gallery-123">
+                    <p class="text-xs text-slate-400 mt-2">Must be globally unique. Lowercase only.</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('createBucketModal')" class="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                    <button type="submit" class="px-6 py-2.5 bg-brand-600 text-white rounded-xl font-semibold hover:bg-brand-700 hover:shadow-lg transition-all">Create Bucket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div id="uploadModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300" id="uploadModalContent">
+            <div class="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center mr-3">
+                        <i class="fa-solid fa-cloud-arrow-up text-indigo-600"></i>
+                    </div>
+                    Upload Assets
+                </h3>
+                <button onclick="closeModal('uploadModal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data" class="p-8">
+                <input type="hidden" name="bucket" value="{{ current_bucket }}">
+                <input type="hidden" name="prefix" value="{{ current_prefix }}">
+                
+                <div class="mb-2">
+                    <div class="relative group mt-1 flex justify-center px-6 pt-8 pb-8 border-2 border-slate-200 border-dashed rounded-2xl hover:border-brand-400 hover:bg-brand-50/30 transition-all bg-slate-50/50">
+                        <div class="space-y-2 text-center w-full">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-images text-brand-400 text-2xl"></i>
+                            </div>
+                            <div class="flex justify-center text-sm text-slate-600">
+                                <label for="file-upload" class="relative cursor-pointer bg-white px-4 py-2 rounded-lg font-semibold text-brand-600 hover:text-brand-700 shadow-sm border border-slate-200 hover:border-brand-300 transition-all focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-brand-500">
+                                    <span>Browse Files</span>
+                                    <input id="file-upload" name="file" type="file" class="sr-only" required accept="image/*" multiple onchange="updatePreview(this)">
+                                </label>
+                            </div>
+                            <p class="text-xs font-medium text-slate-400 pt-2">Multiple files allowed (Max 10MB)</p>
+                        </div>
+                    </div>
+                    <!-- Preview Container -->
+                    <div id="image-preview-container" class="mt-6 grid grid-cols-4 gap-3 hidden max-h-48 overflow-y-auto p-3 border border-slate-100 rounded-xl bg-slate-50/80 custom-scrollbar">
+                        <!-- Previews injected here -->
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3 mt-8 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('uploadModal')" class="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                    <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-brand-500 to-indigo-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-brand-500/30 transition-all">Upload Now</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div id="folderModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300" id="folderModalContent">
+            <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center mr-3">
+                        <i class="fa-solid fa-folder-plus text-emerald-600"></i>
+                    </div>
+                    New Directory
+                </h3>
+                <button onclick="closeModal('folderModal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form action="{{ url_for('create_folder') }}" method="POST" class="p-6">
+                <input type="hidden" name="bucket" value="{{ current_bucket }}">
+                <input type="hidden" name="prefix" value="{{ current_prefix }}">
+                
+                <div class="mb-6">
+                    <label for="folder_name" class="block text-sm font-semibold text-slate-700 mb-2">Directory Name</label>
+                    <input type="text" id="folder_name" name="folder_name" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white outline-none transition-all font-medium text-slate-800" placeholder="e.g. Summer_Vacation">
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('folderModal')" class="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                    <button type="submit" class="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 hover:shadow-lg transition-all">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div id="renameModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden transform scale-95 transition-transform duration-300" id="renameModalContent">
+            <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center">
+                    <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center mr-3">
+                        <i class="fa-solid fa-pen text-amber-600"></i>
+                    </div>
+                    Rename Asset
+                </h3>
+                <button onclick="closeModal('renameModal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form action="{{ url_for('rename_object') }}" method="POST" class="p-6">
+                <input type="hidden" name="bucket" value="{{ current_bucket }}">
+                <input type="hidden" name="prefix" value="{{ current_prefix }}">
+                <input type="hidden" id="rename_old_key" name="old_key" value="">
+                
+                <div class="mb-6">
+                    <label for="new_name" class="block text-sm font-semibold text-slate-700 mb-2">New Name</label>
+                    <input type="text" id="new_name" name="new_name" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:bg-white outline-none transition-all font-medium text-slate-800">
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal('renameModal')" class="px-5 py-2.5 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                    <button type="submit" class="px-6 py-2.5 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 hover:shadow-lg transition-all">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lightbox Modal -->
+    <div id="lightbox" class="fixed inset-0 bg-slate-900/90 hidden z-[60] flex flex-col items-center justify-center opacity-0 transition-opacity duration-300" onclick="closeLightbox()">
+        <div class="absolute top-6 right-6 flex space-x-4">
+            <a id="lightbox-download" href="#" target="_blank" class="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors" onclick="event.stopPropagation()">
+                <i class="fa-solid fa-download"></i>
+            </a>
+            <button class="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <img id="lightbox-img" src="" alt="Gallery Image" class="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl transform scale-95 transition-transform duration-300" onclick="event.stopPropagation()">
+        <p id="lightbox-title" class="text-white mt-4 font-medium tracking-wide"></p>
+    </div>
+
+    <script>
+        // Modal Logic
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            const content = document.getElementById(id + 'Content');
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // trigger reflow
+            modal.classList.remove('opacity-0');
+            modal.classList.add('opacity-100');
+            if(content) {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            const content = document.getElementById(id + 'Content');
+            modal.classList.remove('opacity-100');
+            modal.classList.add('opacity-0');
+            if(content) {
+                content.classList.remove('scale-100');
+                content.classList.add('scale-95');
+            }
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
+        }
+
+        function openRenameModal(key, currentName) {
+            document.getElementById('rename_old_key').value = key;
+            document.getElementById('new_name').value = currentName;
+            openModal('renameModal');
+        }
+
+        // Lightbox Logic
+        function openLightbox(url, name) {
+            if(!url) return;
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            const title = document.getElementById('lightbox-title');
+            const download = document.getElementById('lightbox-download');
+            
+            img.src = url;
+            title.textContent = name;
+            download.href = url;
+            
+            lightbox.classList.remove('hidden');
+            void lightbox.offsetWidth;
+            lightbox.classList.remove('opacity-0');
+            lightbox.classList.add('opacity-100');
+            img.classList.remove('scale-95');
+            img.classList.add('scale-100');
+            document.body.style.overflow = 'hidden'; // prevent background scrolling
+        }
+
+        function closeLightbox() {
+            const lightbox = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            
+            lightbox.classList.remove('opacity-100');
+            lightbox.classList.add('opacity-0');
+            img.classList.remove('scale-100');
+            img.classList.add('scale-95');
+            
+            setTimeout(() => { 
+                lightbox.classList.add('hidden');
+                document.body.style.overflow = 'auto'; 
+            }, 300);
+        }
+
+        // Preview Logic
+        function updatePreview(input) {
+            const previewContainer = document.getElementById('image-preview-container');
+            previewContainer.innerHTML = '';
+            
+            if (input.files && input.files.length > 0) {
+                previewContainer.classList.remove('hidden');
+                
+                Array.from(input.files).forEach(file => {
+                    if (!file.type.startsWith('image/')) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const div = document.createElement('div');
+                        div.className = 'relative group aspect-square rounded-lg overflow-hidden bg-white border border-slate-200 shadow-sm';
+                        
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'w-full h-full object-cover';
+                        
+                        const badge = document.createElement('div');
+                        badge.className = 'absolute bottom-0 inset-x-0 bg-slate-900/60 backdrop-blur-sm text-white text-[9px] font-medium truncate px-1.5 py-1 text-center';
+                        badge.textContent = file.name;
+                        
+                        div.appendChild(img);
+                        div.appendChild(badge);
+                        previewContainer.appendChild(div);
+                    }
+                    reader.readAsDataURL(file);
+                });
+            } else {
+                previewContainer.classList.add('hidden');
+            }
+        }
+
+        // Event Listeners
+        window.onclick = function(event) {
+            if (event.target.classList.contains('bg-slate-900/60')) {
+                closeModal(event.target.id);
+            }
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape") {
+                const lightbox = document.getElementById('lightbox');
+                if (!lightbox.classList.contains('hidden')) {
+                    closeLightbox();
+                }
+            }
+        });
+
+        // Auto-dismiss toast messages
+        document.addEventListener('DOMContentLoaded', () => {
+            const toasts = document.querySelectorAll('.toast-message');
+            toasts.forEach(toast => {
+                setTimeout(() => {
+                    toast.classList.remove('toast-enter');
+                    toast.classList.add('toast-exit');
+                    setTimeout(() => toast.remove(), 400); 
+                }, 4000);
+            });
+        });
+    </script>
+</body>
+</html>
