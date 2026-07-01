@@ -258,6 +258,46 @@ def rename_object():
         
     return redirect(url_for('index', bucket=bucket, prefix=prefix))
 
+@app.route('/database')
+def view_database():
+    table_name = os.environ.get('DYNAMODB_TABLE_NAME')
+    if not table_name:
+        return render_template('database.html', configured=False)
+        
+    try:
+        dynamodb = boto3.client(
+            'dynamodb',
+            region_name=S3_REGION,
+            aws_access_key_id=AWS_ACCESS_KEY,
+            aws_secret_access_key=AWS_SECRET_KEY
+        )
+        response = dynamodb.scan(TableName=table_name)
+        items = response.get('Items', [])
+        
+        # Simplify dynamodb items for easy rendering
+        simplified_items = []
+        for item in items:
+            simplified_item = {}
+            for k, v in item.items():
+                val = list(v.values())[0] if v else ''
+                simplified_item[k] = val
+            simplified_items.append(simplified_item)
+            
+        # Collect all unique headers
+        headers = set()
+        for item in simplified_items:
+            headers.update(item.keys())
+        headers = list(headers)
+        
+        return render_template('database.html', 
+                               configured=True, 
+                               table_name=table_name, 
+                               items=simplified_items, 
+                               headers=headers)
+    except Exception as e:
+        flash(f'Error accessing DynamoDB: {str(e)}', 'error')
+        return render_template('database.html', configured=True, table_name=table_name, items=[], headers=[])
+
 @app.errorhandler(413)
 def request_entity_too_large(error):
     flash('File size exceeds the 10MB limit.', 'error')
