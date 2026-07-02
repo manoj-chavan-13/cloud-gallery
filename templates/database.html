@@ -3,32 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Database - S3 Cloud Gallery</title>
+    <title>Database Management - S3 Cloud Gallery</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-                    },
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
                     colors: {
                         brand: {
-                            50: '#eff6ff',
-                            100: '#dbeafe',
-                            400: '#60a5fa',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            900: '#1e3a8a',
+                            50: '#eff6ff', 100: '#dbeafe', 400: '#60a5fa',
+                            500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a',
                         }
                     },
                     boxShadow: {
                         'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
-                        'premium': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
                     }
                 }
             }
@@ -42,67 +33,178 @@
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.5);
         }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .toast-enter { animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast-exit { animation: fadeOut 0.4s ease forwards; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col bg-gradient-to-br from-indigo-50 via-white to-sky-50 text-slate-800">
     
+    <!-- Realtime Toast Notifications Container -->
+    <div id="toast-container" class="fixed top-20 right-4 z-[100] flex flex-col space-y-3 pointer-events-none w-80">
+        {% if error %}
+            <div class="toast-message toast-enter pointer-events-auto glass-panel p-4 rounded-2xl shadow-lg border border-red-200 flex items-start bg-red-50">
+                <i class="fa-solid fa-exclamation-circle text-red-500 mt-0.5 text-lg"></i>
+                <div class="ml-3 w-0 flex-1"><p class="text-sm font-medium text-red-800">{{ error }}</p></div>
+                <button onclick="this.parentElement.remove()" class="ml-4 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        {% endif %}
+    </div>
+
     <!-- Navigation -->
     <nav class="glass-panel sticky top-0 z-40 border-b border-white/50 shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-20 items-center">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
                 <div class="flex items-center space-x-3 cursor-pointer" onclick="window.location.href='/'">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center shadow-md">
-                        <i class="fa-solid fa-cloud text-white text-lg"></i>
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center shadow-md">
+                        <i class="fa-solid fa-cloud text-white text-sm"></i>
                     </div>
-                    <span class="font-bold text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">CloudGallery</span>
+                    <span class="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700">CloudGallery</span>
                 </div>
-                <div class="flex items-center space-x-3 sm:space-x-4">
-                    <a href="{{ url_for('index') }}" class="bg-white/80 hover:bg-white text-slate-700 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm border border-slate-200 flex items-center">
+                <div class="flex items-center space-x-3">
+                    <!-- Notification Bell -->
+                    <button onclick="toggleNotificationPanel()" class="relative bg-white/80 hover:bg-white text-slate-600 px-3 py-1.5 rounded-lg text-sm transition-all shadow-sm border border-slate-200 flex items-center group" title="Notification History">
+                        <i class="fa-solid fa-bell group-hover:text-brand-500 transition-colors"></i>
+                        <span id="notif-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full hidden">0</span>
+                    </button>
+                    <a href="{{ url_for('index') }}" class="bg-white/80 hover:bg-white text-slate-700 px-3 py-1.5 rounded-lg font-semibold text-sm transition-all shadow-sm border border-slate-200 flex items-center">
                         <i class="fa-solid fa-images mr-2 text-brand-500"></i> Gallery
+                    </a>
+                    <a href="{{ url_for('db.list_tables') }}" class="bg-brand-50 hover:bg-brand-100 text-brand-700 px-3 py-1.5 rounded-lg font-semibold text-sm transition-all shadow-sm border border-brand-200 flex items-center">
+                        <i class="fa-solid fa-database mr-2"></i> Database
                     </a>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        <div class="mb-8">
-            <h2 class="text-2xl font-bold text-slate-800 mb-6 flex items-center">
-                <i class="fa-solid fa-table-list text-brand-500 mr-3"></i> Database Records
-            </h2>
+    <div class="flex-grow flex max-w-[1400px] mx-auto w-full relative overflow-hidden">
+        
+        <!-- Notification History Drawer (Persistent across pages) -->
+        <div id="notification-drawer" class="absolute right-0 top-0 bottom-0 w-80 bg-white/95 backdrop-blur-xl border-l border-slate-200 shadow-2xl z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-slate-800 flex items-center"><i class="fa-solid fa-clock-rotate-left mr-2 text-brand-500"></i> System Logs</h3>
+                <div class="flex space-x-3">
+                    <button onclick="clearNotifications()" class="text-xs text-red-500 hover:text-red-700 font-medium">Clear All</button>
+                    <button onclick="toggleNotificationPanel()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div id="notification-list" class="flex-grow overflow-y-auto p-4 space-y-3">
+                <div class="text-center text-slate-400 text-sm mt-10" id="empty-notifs">No notifications yet.</div>
+            </div>
+        </div>
+
+        <!-- Sidebar: Table List -->
+        <aside class="w-64 flex-shrink-0 glass-panel border-r border-white/50 h-[calc(100vh-4rem)] sticky top-16 overflow-y-auto flex flex-col p-4 z-10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-slate-800 text-lg">Tables</h3>
+                <button onclick="document.getElementById('createTableModal').classList.remove('hidden')" class="w-8 h-8 rounded-lg bg-brand-500 text-white flex items-center justify-center hover:bg-brand-600 transition-colors shadow-sm" title="Create New Table">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
             
-            {% if not configured %}
-                <!-- Empty State: Not Configured -->
-                <div class="col-span-full flex flex-col items-center justify-center py-20 glass-panel rounded-3xl border-2 border-dashed border-slate-300/50 mt-6">
-                    <div class="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-5 shadow-inner">
-                        <i class="fa-solid fa-triangle-exclamation text-amber-400 text-3xl"></i>
+            <div class="flex-grow">
+                {% if tables %}
+                    <ul class="space-y-1">
+                        {% for table in tables %}
+                            <li>
+                                <a href="{{ url_for('db.view_table', table_name=table) }}" class="flex items-center px-3 py-2.5 rounded-lg transition-all {% if current_table == table %}bg-brand-50 text-brand-700 font-semibold shadow-sm border border-brand-100{% else %}text-slate-600 hover:bg-white/80 hover:text-slate-900{% endif %}">
+                                    <i class="fa-solid fa-table text-slate-400 mr-2.5 {% if current_table == table %}text-brand-500{% endif %}"></i>
+                                    <span class="truncate text-sm">{{ table }}</span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="text-center py-8">
+                        <i class="fa-solid fa-database text-slate-300 text-3xl mb-2"></i>
+                        <p class="text-sm text-slate-500">No tables found.</p>
                     </div>
-                    <h3 class="text-lg font-bold text-slate-800 mb-2">Database Not Configured</h3>
-                    <p class="text-slate-500 mb-6 text-sm text-center max-w-md">To view records, please add <code>DYNAMODB_TABLE_NAME=your_table_name</code> to your <code>.env</code> file.</p>
+                {% endif %}
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-grow p-6 h-[calc(100vh-4rem)] overflow-y-auto w-full">
+            {% if not current_table %}
+                <div class="flex flex-col items-center justify-center h-full text-center p-8 glass-panel rounded-3xl border-2 border-dashed border-slate-300/50">
+                    <div class="w-24 h-24 bg-brand-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                        <i class="fa-solid fa-bolt text-brand-400 text-4xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-slate-800 mb-3">Real-Time Database</h2>
+                    <p class="text-slate-500 mb-8 max-w-md">Select a table from the sidebar to view and manage its data instantly without reloading, or create a new one.</p>
+                    <button onclick="document.getElementById('createTableModal').classList.remove('hidden')" class="px-6 py-2.5 bg-brand-500 text-white font-medium rounded-xl shadow-md hover:bg-brand-600 hover:shadow-lg transition-all flex items-center">
+                        <i class="fa-solid fa-plus mr-2"></i> Create New Table
+                    </button>
                 </div>
             {% else %}
-                <div class="glass-panel rounded-3xl p-6 border border-white shadow-sm overflow-hidden">
-                    <div class="mb-4 flex items-center space-x-2">
-                        <span class="text-sm font-semibold text-slate-500">Connected Table:</span>
-                        <span class="px-3 py-1 bg-brand-100 text-brand-700 rounded-lg text-sm font-bold">{{ table_name }}</span>
+                <div class="mb-6 flex justify-between items-end">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800 flex items-center">
+                            <i class="fa-solid fa-table-list text-brand-500 mr-3"></i> {{ current_table }}
+                        </h2>
+                        
+                        <div class="flex items-center space-x-2 mt-2">
+                            {% if table_status == 'ACTIVE' %}
+                                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded flex items-center"><i class="fa-solid fa-circle text-[8px] mr-1"></i> ACTIVE</span>
+                                <p class="text-sm text-slate-500">Ready for operations.</p>
+                            {% else %}
+                                <span class="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded flex items-center"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> {{ table_status }}</span>
+                                <p class="text-sm text-slate-500">Table is being prepared...</p>
+                            {% endif %}
+                        </div>
                     </div>
+                    <div>
+                        <button {% if table_status != 'ACTIVE' %}disabled{% endif %} onclick="openInsertModal()" class="px-4 py-2 bg-brand-500 text-white font-medium rounded-xl shadow-md hover:bg-brand-600 transition-all flex items-center text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-plus mr-2"></i> Add Item
+                        </button>
+                    </div>
+                </div>
 
-                    <div class="overflow-x-auto w-full mt-4">
+                {% if table_status == 'ACTIVE' %}
+                <div class="glass-panel rounded-2xl border border-white shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto w-full">
                         {% if items %}
-                        <table class="w-full whitespace-nowrap text-left border-collapse">
+                        <table class="w-full text-left border-collapse min-w-max">
                             <thead>
                                 <tr class="border-b border-slate-200">
+                                    <th class="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50 w-24">Actions</th>
                                     {% for header in headers %}
-                                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50 first:rounded-tl-xl last:rounded-tr-xl">{{ header }}</th>
+                                        <th class="py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50">{{ header }}</th>
                                     {% endfor %}
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 {% for item in items %}
-                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                    <tr class="hover:bg-slate-50/80 transition-colors group">
+                                        <td class="py-3 px-4 flex space-x-2">
+                                            <!-- Edit Button -->
+                                            <button onclick="openEditModal('{{ item | tojson | forceescape }}')" class="text-amber-500 hover:text-amber-600 bg-amber-50 hover:bg-amber-100 w-7 h-7 rounded flex items-center justify-center transition-colors" title="Edit">
+                                                <i class="fa-solid fa-pen text-xs"></i>
+                                            </button>
+                                            <!-- Delete Button -->
+                                            <button onclick="deleteItem('{{ item | tojson | forceescape }}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 w-7 h-7 rounded flex items-center justify-center transition-colors" title="Delete">
+                                                <i class="fa-solid fa-trash-can text-xs"></i>
+                                            </button>
+                                        </td>
                                         {% for header in headers %}
-                                            <td class="py-4 px-6 text-sm text-slate-700">{{ item.get(header, '-') }}</td>
+                                            <td class="py-3 px-4 text-sm text-slate-700">
+                                                <div class="max-w-[300px] truncate" title="{{ item.get(header, '') }}">
+                                                    {{ item.get(header, '<span class="text-slate-300 italic">null</span>')|safe }}
+                                                </div>
+                                            </td>
                                         {% endfor %}
                                     </tr>
                                 {% endfor %}
@@ -111,15 +213,308 @@
                         {% else %}
                         <div class="py-16 text-center">
                             <i class="fa-solid fa-box-open text-slate-300 text-5xl mb-4"></i>
-                            <h3 class="text-lg font-bold text-slate-600 mb-1">No Records Found</h3>
-                            <p class="text-slate-400 text-sm">The connected DynamoDB table is currently empty.</p>
+                            <h3 class="text-lg font-bold text-slate-600 mb-1">Table is Empty</h3>
+                            <p class="text-slate-400 text-sm mb-6">There are no items in this table yet.</p>
+                            <button onclick="openInsertModal()" class="px-4 py-2 bg-slate-800 text-white font-medium rounded-xl shadow-sm hover:bg-slate-700 transition-all text-sm">
+                                Insert First Item
+                            </button>
                         </div>
                         {% endif %}
                     </div>
                 </div>
+                {% else %}
+                <div class="py-20 flex flex-col items-center justify-center glass-panel rounded-2xl border border-white">
+                    <i class="fa-solid fa-gears text-4xl text-amber-500 mb-4 animate-pulse"></i>
+                    <h3 class="text-xl font-bold text-slate-700 mb-2">Creating Table</h3>
+                    <p class="text-slate-500 mb-6 text-sm">AWS is provisioning your DynamoDB table. Please wait...</p>
+                    <div class="w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-brand-500 rounded-full animate-[pulse_2s_ease-in-out_infinite]" style="width: 100%"></div>
+                    </div>
+                </div>
+                {% endif %}
             {% endif %}
-        </div>
-    </main>
+        </main>
+    </div>
 
+    <!-- Modals -->
+
+    <!-- Create Table Modal -->
+    <div id="createTableModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl w-full max-w-md border border-white shadow-2xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white/50">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center"><i class="fa-solid fa-plus-circle text-brand-500 mr-2"></i> Create Table</h3>
+                <button type="button" onclick="document.getElementById('createTableModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <form id="createTableForm" onsubmit="event.preventDefault(); submitCreateTable();" class="p-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Table Name</label>
+                        <input type="text" id="create-table-name" required placeholder="e.g. Users" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition-all text-sm bg-white/80">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Partition Key (String)</label>
+                        <input type="text" id="create-table-key" required placeholder="e.g. id" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition-all text-sm bg-white/80">
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end space-x-3">
+                    <button type="button" onclick="document.getElementById('createTableModal').classList.add('hidden')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+                    <button type="submit" id="btn-create-table" class="px-5 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium shadow-md hover:bg-brand-600 transition-colors flex items-center">
+                        <i class="fa-solid fa-spinner fa-spin hidden mr-2" id="spinner-create-table"></i> Create Table
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Insert/Edit Item Modal -->
+    {% if current_table %}
+    <div id="itemModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel rounded-3xl w-full max-w-lg border border-white shadow-2xl overflow-hidden">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-white/50">
+                <h3 id="itemModalTitle" class="text-lg font-bold text-slate-800 flex items-center"><i class="fa-solid fa-file-circle-plus text-brand-500 mr-2"></i> Add Item</h3>
+                <button type="button" onclick="document.getElementById('itemModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <form id="itemForm" onsubmit="event.preventDefault(); submitItem();" class="p-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Item Data (JSON)</label>
+                    <textarea id="item-json" rows="10" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition-all text-sm font-mono bg-slate-900 text-green-400 resize-y" placeholder='{
+  "id": "1",
+  "name": "John Doe"
+}'></textarea>
+                    <p class="text-xs text-slate-500 mt-2"><i class="fa-solid fa-circle-info mr-1"></i> Ensure the primary key is included. Modifying a primary key will create a new item.</p>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="document.getElementById('itemModal').classList.add('hidden')" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+                    <button type="submit" id="btn-save-item" class="px-5 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium shadow-md hover:bg-brand-600 transition-colors flex items-center">
+                        <i class="fa-solid fa-spinner fa-spin hidden mr-2" id="spinner-save-item"></i> Save Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    
+    <script>
+        // --- Persistent Notification System (localStorage) ---
+        const NOTIF_KEY = 'cloudgallery_notifications';
+        
+        function getNotifications() {
+            return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+        }
+        
+        function saveNotification(notif) {
+            const notifs = getNotifications();
+            notifs.unshift(notif); // Add to beginning
+            if (notifs.length > 50) notifs.pop(); // Keep last 50
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(notifs));
+        }
+
+        function clearNotifications() {
+            localStorage.setItem(NOTIF_KEY, '[]');
+            renderNotificationList();
+            document.getElementById('notif-badge').classList.add('hidden');
+        }
+
+        function renderNotificationList() {
+            const historyList = document.getElementById('notification-list');
+            const notifs = getNotifications();
+            
+            historyList.innerHTML = '';
+            if (notifs.length === 0) {
+                historyList.innerHTML = '<div class="text-center text-slate-400 text-sm mt-10" id="empty-notifs">No notifications yet.</div>';
+                return;
+            }
+
+            notifs.forEach(n => {
+                const icon = n.type === 'success' ? '<i class="fa-solid fa-check-circle text-green-500"></i>' : '<i class="fa-solid fa-exclamation-circle text-red-500"></i>';
+                const logItem = document.createElement('div');
+                logItem.className = 'p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-start space-x-3 text-sm';
+                logItem.innerHTML = `
+                    <div class="mt-0.5">${icon}</div>
+                    <div>
+                        <p class="font-medium text-slate-700">${n.message}</p>
+                        <p class="text-xs text-slate-400 mt-1">${n.time}</p>
+                    </div>
+                `;
+                historyList.appendChild(logItem);
+            });
+        }
+
+        function addNotification(message, type) {
+            const time = new Date().toLocaleTimeString();
+            
+            // 1. Show Toast
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const icon = type === 'success' ? '<i class="fa-solid fa-check-circle text-green-500"></i>' : '<i class="fa-solid fa-exclamation-circle text-red-500"></i>';
+            const colorClass = type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800';
+            
+            toast.className = `toast-message toast-enter pointer-events-auto glass-panel p-4 rounded-2xl shadow-lg border flex items-start ${colorClass}`;
+            toast.innerHTML = `
+                <div class="mt-0.5 text-lg">${icon}</div>
+                <div class="ml-3 w-0 flex-1"><p class="text-sm font-medium">${message}</p></div>
+                <button onclick="this.parentElement.remove()" class="ml-4 text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            `;
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('toast-enter');
+                toast.classList.add('toast-exit');
+                setTimeout(() => toast.remove(), 400); 
+            }, 5000);
+
+            // 2. Save and Render
+            saveNotification({ message, type, time });
+            renderNotificationList();
+
+            // 3. Update Badge if drawer is closed
+            const drawer = document.getElementById('notification-drawer');
+            if (drawer.classList.contains('translate-x-full')) {
+                const badge = document.getElementById('notif-badge');
+                let count = parseInt(badge.textContent) || 0;
+                badge.textContent = count + 1;
+                badge.classList.remove('hidden');
+            }
+        }
+
+        function toggleNotificationPanel() {
+            const drawer = document.getElementById('notification-drawer');
+            drawer.classList.toggle('translate-x-full');
+            if (!drawer.classList.contains('translate-x-full')) {
+                document.getElementById('notif-badge').textContent = '0';
+                document.getElementById('notif-badge').classList.add('hidden');
+            }
+        }
+
+        // Initialize notifications on page load
+        document.addEventListener('DOMContentLoaded', renderNotificationList);
+
+        // --- Table Actions ---
+        
+        async function submitCreateTable() {
+            const btn = document.getElementById('btn-create-table');
+            const spinner = document.getElementById('spinner-create-table');
+            const tableName = document.getElementById('create-table-name').value;
+            const partitionKey = document.getElementById('create-table-key').value;
+            
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+            
+            try {
+                const res = await fetch('/db/api/create_table', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table_name: tableName, partition_key: partitionKey })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    addNotification(data.message, 'success');
+                    document.getElementById('createTableModal').classList.add('hidden');
+                    setTimeout(() => window.location.href = `/db/table/${tableName}`, 1000);
+                } else {
+                    addNotification(data.message, 'error');
+                }
+            } catch (err) {
+                addNotification(err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        {% if current_table %}
+        function openInsertModal() {
+            document.getElementById('itemModalTitle').innerHTML = '<i class="fa-solid fa-file-circle-plus text-brand-500 mr-2"></i> Add New Item';
+            document.getElementById('item-json').value = '{\n  \n}';
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function openEditModal(itemJsonStr) {
+            document.getElementById('itemModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-amber-500 mr-2"></i> Edit Item';
+            try {
+                const parsed = JSON.parse(itemJsonStr);
+                document.getElementById('item-json').value = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                document.getElementById('item-json').value = itemJsonStr;
+            }
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        async function submitItem() {
+            const btn = document.getElementById('btn-save-item');
+            const spinner = document.getElementById('spinner-save-item');
+            const jsonText = document.getElementById('item-json').value;
+            
+            btn.disabled = true;
+            spinner.classList.remove('hidden');
+            
+            try {
+                JSON.parse(jsonText); // Pre-validate
+                
+                // Note: DynamoDB put_item inherently acts as an insert OR update (upsert)
+                const res = await fetch('/db/api/table/{{ current_table }}/insert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_json: jsonText })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    addNotification("Record saved successfully!", 'success');
+                    document.getElementById('itemModal').classList.add('hidden');
+                    // Reload to reflect changes
+                    setTimeout(() => window.location.reload(), 500);
+                } else {
+                    addNotification(data.message, 'error');
+                }
+            } catch (err) {
+                addNotification(err instanceof SyntaxError ? "Invalid JSON syntax. Please format properly." : err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('hidden');
+            }
+        }
+
+        async function deleteItem(itemJsonStr) {
+            if (!confirm('Are you sure you want to permanently delete this record?')) return;
+            
+            try {
+                const res = await fetch('/db/api/table/{{ current_table }}/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_json: itemJsonStr })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    addNotification(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 500);
+                } else {
+                    addNotification(data.message, 'error');
+                }
+            } catch (err) {
+                addNotification(err.message, 'error');
+            }
+        }
+
+        {% if table_status != 'ACTIVE' %}
+        // Polling logic when table is creating
+        let pollInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/db/api/table/{{ current_table }}/status');
+                const data = await res.json();
+                if (data.success && data.status === 'ACTIVE') {
+                    clearInterval(pollInterval);
+                    addNotification("Table '{{ current_table }}' is now ACTIVE and ready!", 'success');
+                    setTimeout(() => window.location.reload(), 1500);
+                }
+            } catch (e) {
+                console.error("Polling error", e);
+            }
+        }, 3000);
+        {% endif %}
+        {% endif %}
+    </script>
 </body>
 </html>
