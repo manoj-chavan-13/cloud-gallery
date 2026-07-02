@@ -1,10 +1,32 @@
 import os
 import boto3
 import json
+import datetime
 from botocore.exceptions import ClientError
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 
 db_bp = Blueprint('db', __name__, url_prefix='/db')
+
+LOG_FILE = 'db_audit_logs.json'
+
+def log_action(action_type, details, status="success"):
+    log_entry = {
+        'time': datetime.datetime.now().strftime("%I:%M:%S %p"),
+        'action': action_type,
+        'message': details,
+        'type': status
+    }
+    logs = []
+    if os.path.exists(LOG_FILE):
+        try:
+            with open(LOG_FILE, 'r') as f:
+                logs = json.load(f)
+        except:
+            pass
+    logs.insert(0, log_entry) # Put newest first
+    logs = logs[:100] # Keep last 100
+    with open(LOG_FILE, 'w') as f:
+        json.dump(logs, f, indent=4)
 
 def get_dynamodb_client():
     S3_REGION = os.environ.get('AWS_REGION', 'us-east-1')
@@ -84,6 +106,13 @@ def view_table(table_name):
 
 # --- API ROUTES FOR REAL-TIME OPERATIONS ---
 
+@db_bp.route('/api/logs', methods=['GET'])
+def api_get_logs():
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE, 'r') as f:
+            return jsonify({'success': True, 'logs': json.load(f)})
+    return jsonify({'success': True, 'logs': []})
+
 @db_bp.route('/api/create_table', methods=['POST'])
 def api_create_table():
     try:
@@ -101,8 +130,10 @@ def api_create_table():
             AttributeDefinitions=[{'AttributeName': partition_key, 'AttributeType': 'S'}],
             BillingMode='PAY_PER_REQUEST'
         )
+        log_action('CREATE_TABLE', f'Table "{table_name}" creation initiated.')
         return jsonify({'success': True, 'message': f'Table "{table_name}" creation initiated.'})
     except Exception as e:
+        log_action('CREATE_TABLE_ERROR', str(e), 'error')
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @db_bp.route('/api/table/<table_name>/status', methods=['GET'])
@@ -144,8 +175,10 @@ def api_insert_item(table_name):
                 dynamo_item[k] = {'S': json.dumps(v)}
                 
         dynamodb.put_item(TableName=table_name, Item=dynamo_item)
+        log_action('INSERT_ITEM', f'Inserted item into {table_name}')
         return jsonify({'success': True, 'message': 'Data inserted successfully'})
     except Exception as e:
+        log_action('INSERT_ERROR', f'Error in {table_name}: {str(e)}', 'error')
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @db_bp.route('/api/table/<table_name>/delete', methods=['POST'])
@@ -176,6 +209,19 @@ def api_delete_item(table_name):
                 return jsonify({'success': False, 'message': f'Missing primary key component: {k_name}'}), 400
             
         dynamodb.delete_item(TableName=table_name, Key=dynamo_key)
+        log_action('DELETE_ITEM', f'Deleted item from {table_name}')
         return jsonify({'success': True, 'message': 'Record deleted successfully'})
     except Exception as e:
+        log_action('DELETE_ERROR', f'Error in {table_name}: {str(e)}', 'error')
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@db_bp.route('/api/table/<table_name>/delete_table', methods=['POST'])
+def api_delete_table(table_name):
+    try:
+        dynamodb = get_dynamodb_client()
+        dynamodb.delete_table(TableName=table_name)
+        log_action('DELETE_TABLE', f'Table "{table_name}" deleted.')
+        return jsonify({'success': True, 'message': f'Table "{table_name}" deleted.'})
+    except Exception as e:
+        log_action('DELETE_TABLE_ERROR', f'Error deleting {table_name}: {str(e)}', 'error')
         return jsonify({'success': False, 'message': str(e)}), 500
